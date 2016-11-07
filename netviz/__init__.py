@@ -21,6 +21,8 @@ def dot2img(dot, format="png", layout="dot"):
 
 
 class Network(ActionForm):
+    default_template = "netviz.html"
+    
     class form_class(form.Form):
         network = fields.StringField(widget=widgets.TextArea())
         normalize = fields.BooleanField()
@@ -29,8 +31,10 @@ class Network(ActionForm):
         #blue = fields.BooleanField()
         #bw = fields.BooleanField(label="Black & White")
         delimiter = fields.SelectField(choices=[("","autodetect"), (";",";"), (",",","), ("\t","tab")])
+
+        
     def read_network(self, network, delimiter):
-        lines = network.split("\n")
+        lines = [line.strip(' ') for line in network.split("\n")]
         if not delimiter:
             delimiters = {d : network.count(d) for d in ",;\t"}
             delimiter = sorted(delimiters, key=delimiters.get)[-1]
@@ -40,8 +44,13 @@ class Network(ActionForm):
         nodes = {}
         edges = []
         maxweight = 0
-        for edge in r:
+        for i, edge in enumerate(r):
             src, su, obj, pred, q, n = edge + [None]*(6-len(edge))
+            if not su or not obj:
+                continue
+            if i == 0 and edge == ["source","subject","object","predicate","quality","weight"]:
+                continue
+            print(i, edge)
             if q: q = float(q)
             if n: n = float(n)
             for o in su, obj:
@@ -71,9 +80,7 @@ class Network(ActionForm):
                 lbl.append("%+1.2f" % q)
             if lbl:
                 kargs['label'] = "\\n".join(lbl)
-            print(kargs)
             kargs = ",".join('{k}="{v}"'.format(**locals()) for (k,v) in kargs.items())
-            print(kargs)
             dot.append('{su} -> {obj} [{kargs}];'.format(**locals()))
         dot.append("}")
             
@@ -85,8 +92,9 @@ class Network(ActionForm):
         image = dot2img(dot, format='html')
         return dict(dot=dot, image=image)
 
-    def render_result(self, result):
-        return "<pre>{dot}</pre>{image}".format(**result)
+    def render_result(self, result, template, context):
+        context.update(result)
+        return template.render(**context)
         
 if __name__ == '__main__':
     Network.run_webserver()

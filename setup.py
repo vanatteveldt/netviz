@@ -14,6 +14,6 @@ setup(
         "License :: OSI Approved :: MIT License",
     ],
     install_requires=[
-        "actionform",
+        "actionform>=0.03",
     ]
 )

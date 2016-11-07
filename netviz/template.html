@@ -1,0 +1,17 @@
+<html>
+<body>
+<h1>YO {{title}}</h1>
+<form method="POST" action="/">
+<dl>
+{% for field in form %}
+    <dt>{{ field.label }}</dt><dd>{{ field() }}</dd>
+{% endfor %}
+</dl>
+    <input type="submit" value="Go">
+</form>
+{% if result %}
+<hr/>
+{{ result|safe }}
+{% endif %}
+</body>
+</html>

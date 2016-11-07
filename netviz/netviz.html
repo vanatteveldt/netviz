@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+  <head>
+
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    
+    <style>
+      textarea.form-control {height: 15em}
+      </style>
+    </head>
+
+  <body>
+
+<div class="container">
+  <h1>NET Visualizer</h1>
+
+<pre>
+    Make a network diagram from a list (table) of edges.
+    The 'network' should consist of a csv-like string delimited by comma, semicolon, or tab.
+    A header is optional and will be ignored. If given, it must name the first columns 'subject' and 'object'
+    Columns are subject and object (obligatory) and optional weight, quality, and subgraph (source).
+    Example network (can be pasted into the 'network' input below):
+    
+    source,subject,object,predicate,quality,weight
+    ,john,mary,dislikes,-1,2
+    ,mary,pete
+    ,pete,john,,0.5
+    ,john,mary,hates,-1,3
+    ,
+    pete,mary,john,loves,.25,5
+</pre>
+
+<form method="POST" action="/">
+  {% for field in form %}
+
+  
+  <div class="form-group">
+    {% if field.type == 'BooleanField' %}
+    <div class="checkbox"><label>{{ field(type='checkbox') }} {{ field.label }}</label></div>
+    {% else %}
+    <label for="{{field.id}}">{{ field.label }}</label> {{ field(class='form-control') }}
+    {% endif %}
+  </div>
+  
+{% endfor %}
+    <input type="submit" value="Go">
+</form>
+{% if result %}
+<hr/>
+{{image}}
+<pre>
+  {{dot}}
+  </pre>
+{% endif %}
+</div>
+</body>
+</html>
