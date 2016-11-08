@@ -2,12 +2,15 @@ import csv
 import subprocess
 from io import StringIO
 import base64
+import re
 
 from wtforms import form, fields, widgets
 from actionform import ActionForm, webserver
 
 def clean(x):
-    return x.strip().replace(" ", "_")
+    x = x.strip().replace(" ", "_")
+    x = re.sub("\W", "_", x)
+    return x
 
 def dot2img(dot, format="png", layout="dot"):
     dotformat = 'png' if format == 'html' else format
