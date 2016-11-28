@@ -28,6 +28,7 @@ class Network(ActionForm):
         normalize = fields.BooleanField()
         qualabel = fields.BooleanField(label="Include quality in label")
         predlabel = fields.BooleanField(label="Include predicate in label")
+        collapse = fields.BooleanField(label="Collapse arrows between nodes")
         #blue = fields.BooleanField()
         #bw = fields.BooleanField(label="Black & White")
         delimiter = fields.SelectField(choices=[("","autodetect"), (";",";"), (",",","), ("\t","tab")])
@@ -40,19 +41,39 @@ class Network(ActionForm):
             delimiter = sorted(delimiters, key=delimiters.get)[-1]
         return csv.reader(lines, delimiter=delimiter)
 
+    def normalize(self, network):        
+        for i, edge in enumerate(network):
+            src, su, obj, pred, q, n = edge + [None]*(6-len(edge))
+            if i == 0 and su == "subject" and obj == "object":
+                continue
+            if not su or not obj:
+                continue
+            if q: q = float(q)
+            if n: n = float(n)
+            yield src, su, obj, pred, q, n
+            
+    def collapse(self, r):
+        edges = {} # src, su, obj: (totq, totn)
+        for src, su, obj, pred, q, n in r:
+            key = (src, su, obj)
+            if key not in edges:
+                edges[key] = [0,0, []]
+            if not n: n = 1
+            if not q: q = 0
+            edges[key][0] += q*n
+            edges[key][1] += n
+            if pred: edges[key][2] += [pred]
+            
+        for (src, su, obj), (totq, totn, preds) in edges.items():
+            yield src, su, obj, "\\n".join(preds), totq/totn, totn
+    
     def get_graph(self, r, **options):
         nodes = {}
         edges = []
         maxweight = 0
-        for i, edge in enumerate(r):
-            src, su, obj, pred, q, n = edge + [None]*(6-len(edge))
-            if not su or not obj:
-                continue
-            if i == 0 and edge == ["source","subject","object","predicate","quality","weight"]:
-                continue
-            print(i, edge)
-            if q: q = float(q)
-            if n: n = float(n)
+        r = list(r)
+        if not r: return
+        for src, su, obj, pred, q, n in r:
             for o in su, obj:
                 if o not in nodes:
                     nodes[o] = clean(o)
@@ -87,7 +108,9 @@ class Network(ActionForm):
         return "\n".join(dot)
         
     def _run(self, network, delimiter, **options):
-        r = self.read_network(network, delimiter)
+        r = self.normalize(self.read_network(network, delimiter))
+        if options.get('collapse'):
+            r = self.collapse(r)
         dot = self.get_graph(r, **options)
         image = dot2img(dot, format='html')
         return dict(dot=dot, image=image)
