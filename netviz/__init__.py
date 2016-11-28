@@ -1,4 +1,5 @@
 import csv
+import collections
 import subprocess
 from io import StringIO
 import base64
@@ -7,9 +8,12 @@ import re
 from wtforms import form, fields, widgets
 from actionform import ActionForm, webserver
 
-def clean(x):
+def clean(x, subgraph=None):
     x = x.strip().replace(" ", "_")
     x = re.sub("\W", "_", x)
+    if subgraph:
+        subgraph = clean(str(subgraph))
+        x = "_{subgraph}__{x}".format(**locals())
     return x
 
 def dot2img(dot, format="png", layout="dot"):
@@ -31,6 +35,7 @@ class Network(ActionForm):
         normalize = fields.BooleanField()
         qualabel = fields.BooleanField(label="Include quality in label")
         predlabel = fields.BooleanField(label="Include predicate in label")
+        collapse = fields.BooleanField(label="Collapse arrows between nodes")
         #blue = fields.BooleanField()
         #bw = fields.BooleanField(label="Black & White")
         delimiter = fields.SelectField(choices=[("","autodetect"), (";",";"), (",",","), ("\t","tab")])
@@ -43,54 +48,80 @@ class Network(ActionForm):
             delimiter = sorted(delimiters, key=delimiters.get)[-1]
         return csv.reader(lines, delimiter=delimiter)
 
-    def get_graph(self, r, **options):
-        nodes = {}
-        edges = []
-        maxweight = 0
-        for i, edge in enumerate(r):
+    def normalize(self, network):        
+        for i, edge in enumerate(network):
             src, su, obj, pred, q, n = edge + [None]*(6-len(edge))
+            if i == 0 and su == "subject" and obj == "object":
+                continue
             if not su or not obj:
                 continue
-            if i == 0 and edge == ["source","subject","object","predicate","quality","weight"]:
-                continue
-            print(i, edge)
             if q: q = float(q)
             if n: n = float(n)
-            for o in su, obj:
-                if o not in nodes:
-                    nodes[o] = clean(o)
-            edges.append((src, su, obj, pred, q, n))
+            yield src, su, obj, pred, q, n
+            
+    def collapse(self, r):
+        edges = {} # src, su, obj: (totq, totn)
+        for src, su, obj, pred, q, n in r:
+            key = (src, su, obj)
+            if key not in edges:
+                edges[key] = [0,0, []]
+            if not n: n = 1
+            if not q: q = 0
+            edges[key][0] += q*n
+            edges[key][1] += n
+            if pred: edges[key][2] += [pred]
+            
+        for (src, su, obj), (totq, totn, preds) in edges.items():
+            yield src, su, obj, "\\n".join(preds), totq/totn, totn
+
+    def get_graph(self, r, **options):
+        edges = collections.defaultdict(list)
+        maxweight = 0
+        for src, su, obj, pred, q, n in r:
+            edges[src and src.strip()].append((su, obj, pred, q, n))
             if n:
                 maxweight = max(maxweight, n)
 
         dot = ["digraph g {"]
-        for label, id in nodes.items():
-            dot.append('{id} [label="{label}"];'.format(**locals()))
-        for src, su, obj, pred, q, n in edges:
-            su = nodes[su]
-            obj = nodes[obj]
-            kargs = {}
-            lbl = []
-            if n:
-                if options.get('normalize'):
-                    n = n * 5 / maxweight
-                kargs['style'] = 'setlinewidth(%1.3f)' % n
-            if q:
-                kargs['color'] = "%1.4f,%1.4f,%1.4f" % (.167 + .167 * q,1,1)
-            if options.get('predlabel') and pred:
-                lbl.append(pred)
-            if options.get('qualabel') and q is not None:
-                lbl.append("%+1.2f" % q)
-            if lbl:
-                kargs['label'] = "\\n".join(lbl)
-            kargs = ",".join('{k}="{v}"'.format(**locals()) for (k,v) in kargs.items())
-            dot.append('{su} -> {obj} [{kargs}];'.format(**locals()))
+        for i, src in enumerate(edges):
+            if src:
+                dot.append('subgraph cluster_%i {\nlabel="%s";' % (i, src))
+
+            nodes = {}
+            for node in set(node for (su, obj, pred, q, n) in edges[src] for node in (su,obj)):
+                id = clean(node, i if src else None)
+                nodes[node] = id
+                dot.append('{id} [label="{node}"];'.format(**locals()))
+                
+            for su, obj, pred, q, n in edges[src]:
+                su = nodes[su]
+                obj = nodes[obj]
+                kargs = {}
+                lbl = []
+                if n:
+                    if options.get('normalize'):
+                        n = n * 5 / maxweight
+                    kargs['style'] = 'setlinewidth(%1.3f)' % n
+                if q:
+                    kargs['color'] = "%1.4f,%1.4f,%1.4f" % (.167 + .167 * q,1,1)
+                if options.get('predlabel') and pred:
+                    lbl.append(pred)
+                if options.get('qualabel') and q is not None:
+                    lbl.append("%+1.2f" % q)
+                if lbl:
+                    kargs['label'] = "\\n".join(lbl)
+                kargs = ",".join('{k}="{v}"'.format(**locals()) for (k,v) in kargs.items())
+                dot.append('{su} -> {obj} [{kargs}];'.format(**locals()))
+            if src:
+                dot.append("}")
         dot.append("}")
             
         return "\n".join(dot)
         
     def _run(self, network, delimiter, **options):
-        r = self.read_network(network, delimiter)
+        r = self.normalize(self.read_network(network, delimiter))
+        if options.get('collapse'):
+            r = self.collapse(r)
         dot = self.get_graph(r, **options)
         image = dot2img(dot, format='html')
         return dict(dot=dot, image=image)
