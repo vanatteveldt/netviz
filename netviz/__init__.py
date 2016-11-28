@@ -1,4 +1,5 @@
 import csv
+import collections
 import subprocess
 from io import StringIO
 import base64
@@ -6,8 +7,11 @@ import base64
 from wtforms import form, fields, widgets
 from actionform import ActionForm, webserver
 
-def clean(x):
-    return x.strip().replace(" ", "_")
+def clean(x, subgraph=None):
+    x = x.strip().replace(" ", "_")
+    if subgraph:
+        x = "_{subgraph}__{x}".format(**locals())
+    return x
 
 def dot2img(dot, format="png", layout="dot"):
     dotformat = 'png' if format == 'html' else format
@@ -66,43 +70,47 @@ class Network(ActionForm):
             
         for (src, su, obj), (totq, totn, preds) in edges.items():
             yield src, su, obj, "\\n".join(preds), totq/totn, totn
-    
+
     def get_graph(self, r, **options):
-        nodes = {}
-        edges = []
+        edges = collections.defaultdict(list)
         maxweight = 0
-        r = list(r)
-        if not r: return
         for src, su, obj, pred, q, n in r:
-            for o in su, obj:
-                if o not in nodes:
-                    nodes[o] = clean(o)
-            edges.append((src, su, obj, pred, q, n))
+            edges[src and src.strip()].append((su, obj, pred, q, n))
             if n:
                 maxweight = max(maxweight, n)
 
         dot = ["digraph g {"]
-        for label, id in nodes.items():
-            dot.append('{id} [label="{label}"];'.format(**locals()))
-        for src, su, obj, pred, q, n in edges:
-            su = nodes[su]
-            obj = nodes[obj]
-            kargs = {}
-            lbl = []
-            if n:
-                if options.get('normalize'):
-                    n = n * 5 / maxweight
-                kargs['style'] = 'setlinewidth(%1.3f)' % n
-            if q:
-                kargs['color'] = "%1.4f,%1.4f,%1.4f" % (.167 + .167 * q,1,1)
-            if options.get('predlabel') and pred:
-                lbl.append(pred)
-            if options.get('qualabel') and q is not None:
-                lbl.append("%+1.2f" % q)
-            if lbl:
-                kargs['label'] = "\\n".join(lbl)
-            kargs = ",".join('{k}="{v}"'.format(**locals()) for (k,v) in kargs.items())
-            dot.append('{su} -> {obj} [{kargs}];'.format(**locals()))
+        for i, src in enumerate(edges):
+            if src:
+                dot.append('subgraph cluster_%i {\nlabel="%s";' % (i, src))
+
+            nodes = {}
+            for node in set(node for (su, obj, pred, q, n) in edges[src] for node in (su,obj)):
+                id = clean(node, i if src else None)
+                nodes[node] = id
+                dot.append('{id} [label="{node}"];'.format(**locals()))
+                
+            for su, obj, pred, q, n in edges[src]:
+                su = nodes[su]
+                obj = nodes[obj]
+                kargs = {}
+                lbl = []
+                if n:
+                    if options.get('normalize'):
+                        n = n * 5 / maxweight
+                    kargs['style'] = 'setlinewidth(%1.3f)' % n
+                if q:
+                    kargs['color'] = "%1.4f,%1.4f,%1.4f" % (.167 + .167 * q,1,1)
+                if options.get('predlabel') and pred:
+                    lbl.append(pred)
+                if options.get('qualabel') and q is not None:
+                    lbl.append("%+1.2f" % q)
+                if lbl:
+                    kargs['label'] = "\\n".join(lbl)
+                kargs = ",".join('{k}="{v}"'.format(**locals()) for (k,v) in kargs.items())
+                dot.append('{su} -> {obj} [{kargs}];'.format(**locals()))
+            if src:
+                dot.append("}")
         dot.append("}")
             
         return "\n".join(dot)
