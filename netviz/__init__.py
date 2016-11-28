@@ -32,10 +32,11 @@ class Network(ActionForm):
     
     class form_class(form.Form):
         network = fields.StringField(widget=widgets.TextArea())
-        normalize = fields.BooleanField()
+        normalize = fields.BooleanField(label="Normalize weights")
         qualabel = fields.BooleanField(label="Include quality in label")
         predlabel = fields.BooleanField(label="Include predicate in label")
         collapse = fields.BooleanField(label="Collapse arrows between nodes")
+        nosubgraphs = fields.BooleanField(label="Don't make subgraphs per source")
         #blue = fields.BooleanField()
         #bw = fields.BooleanField(label="Black & White")
         delimiter = fields.SelectField(choices=[("","autodetect"), (";",";"), (",",","), ("\t","tab")])
@@ -78,6 +79,8 @@ class Network(ActionForm):
         edges = collections.defaultdict(list)
         maxweight = 0
         for src, su, obj, pred, q, n in r:
+            if options.get('nosubgraphs'):
+                src = None
             edges[src and src.strip()].append((su, obj, pred, q, n))
             if n:
                 maxweight = max(maxweight, n)
