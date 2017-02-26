@@ -18,8 +18,10 @@
 <pre>
     Make a network diagram from a list (table) of edges.
     The 'network' should consist of a csv-like string delimited by comma, semicolon, or tab.
-    A header is optional and will be ignored. If given, it must name the first columns 'subject' and 'object'
-    Columns are subject and object (obligatory) and optional weight, quality, and subgraph (source).
+    A header is optional, if it is used it should contain both a subject and object field (case insensitive).
+    Columns are source (subgraph), subject, object, predicate (value), quality, weight.
+    If no header is used, these need to be input in that exact order.
+    Rows without both subject and object will be skipped.
     Example network (can be pasted into the 'network' input below):
     
     source,subject,object,predicate,quality,weight

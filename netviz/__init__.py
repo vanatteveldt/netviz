@@ -25,7 +25,7 @@ def dot2img(dot, format="png", layout="dot"):
         result = "<object type='image/png' data='data:image/png;base64,{data}'></object>".format(**locals())
     return result
 
-
+COLUMNS = ["source", "subject", "object", "predicate", "quality", "weight"]
 
 class Network(ActionForm):
     default_template = "netviz.html"
@@ -49,11 +49,19 @@ class Network(ActionForm):
             delimiter = sorted(delimiters, key=delimiters.get)[-1]
         return csv.reader(lines, delimiter=delimiter)
 
-    def normalize(self, network):        
+    def normalize(self, network):
+        network = list(network)
+        header = [f.lower() for f in network[0]]
+        if not {"subject", "object"} - set(header):
+            # first row is header (so keep header but skip first row)
+            network = network[1:]
+        else:
+            # add default header, keep first row
+            header = COLUMNS
+        network = [dict(zip(header, row)) for row in network]
+
         for i, edge in enumerate(network):
-            src, su, obj, pred, q, n = edge + [None]*(6-len(edge))
-            if i == 0 and su == "subject" and obj == "object":
-                continue
+            src, su, obj, pred, q, n = [edge.get(c) for c in COLUMNS]
             if not su or not obj:
                 continue
             if q: q = float(q)
